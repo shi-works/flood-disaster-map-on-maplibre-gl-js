@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>国土調査-土地履歴調査(災害履歴図(水害))</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+    <script src='https://unpkg.com/maplibre-gl@3.1.0/dist/maplibre-gl.js'></script>
+    <link href='https://unpkg.com/maplibre-gl@3.1.0/dist/maplibre-gl.css' rel='stylesheet' />
+    <script src="https://unpkg.com/pmtiles@2.7.0/dist/index.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@5/turf.min.js"></script>
+    <!--<script src='maplibre-gl-gsi-terrain.js'></script>-->
+    <script type="module" src="maplibre-gl-gsi-terrain-fast-png.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+
+        .map-overlay {
+            font: bold 10px/12px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+            position: absolute;
+            width: 220px;
+            bottom: 25px;
+            left: 0;
+            padding: 5px;
+        }
+
+        .map-overlay .map-overlay-inner {
+            background-color: #fff;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+            border-radius: 3px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .map-overlay label {
+            display: block;
+            margin: 0 0 0px;
+            font-size: 12px;
+            top: 100px;
+            left: 10px;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .map-overlay input {
+            background-color: transparent;
+            display: inline-block;
+            width: 100%;
+            position: relative;
+            margin: 0;
+            cursor: ew-resize;
+        }
+
+        .legend {
+            background-color: #fff;
+            border-radius: 3px;
+            bottom: 40px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.10);
+            font: 12px/14px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+            padding: 10px;
+            position: absolute;
+            right: 10px;
+            z-index: 1;
+            line-height: 10px;
+            height: auto;
+        }
+
+        .legend h4 {
+            margin: 0 0 10px;
+        }
+
+        .legend div span {
+            border-radius: 50%;
+            display: inline-block;
+            height: 15px;
+            margin-right: 10px;
+            width: 15px;
+            color: orangered
+        }
+
+        .square {
+            width: 15px;
+            height: 15px;
+            /*border-radius: 4px;*/
+        }
+
+        #select-flood-disaster {
+            padding: 3px 4px;
+            font: 12px/14px Arial, Helvetica, sans-serif;
+            color: black;
+            background: white;
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            border-radius: 5px;
+            width: 300px;
+            position: absolute;
+            top: 5px;
+            z-index: 10;
+        }
+
+        #flood-disaster {
+            width: 100%;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+    <div id="select-flood-disaster">
+        <label><b>水害の種類</b></label><br>
+        <select id="flood-disaster" onchange="SelectFloodDisaster()">
+            <option value="1896(明治29)年9月降雨">1896(明治29)年9月降雨</option>
+            <option value="1911(明治44)年8月4日台風">1911(明治44)年8月4日台風</option>
+            <option value="1935(昭和10)年6月降雨(鴨川大洪水)">1935(昭和10)年6月降雨(鴨川大洪水)</option>
+            <option value="1938(昭和13)年7月降雨(大雨)阪神大水害">1938(昭和13)年7月降雨(大雨)阪神大水害</option>
+            <option value="1947(昭和22)年9月降雨(カスリーン台風)">1947(昭和22)年9月降雨(カスリーン台風)</option>
+            <option value="1950(昭和25)年9月降雨・高潮(ジェーン台風)">1950(昭和25)年9月降雨・高潮(ジェーン台風)</option>
+            <option value="1951(昭和26)年7月降雨(ケイト台風)">1951(昭和26)年7月降雨(ケイト台風)</option>
+            <option value="1952(昭和27)年7月降雨">1952(昭和27)年7月降雨</option>
+            <option value="1953(昭和28)年8月降雨(大雨)">1953(昭和28)年8月降雨(大雨)</option>
+            <option value="1953(昭和28)年8・9月降雨(南山城水害・台風13号)">1953(昭和28)年8・9月降雨(南山城水害・台風13号)</option>
+            <option value="1953(昭和28)年9月降雨（台風13号）">1953(昭和28)年9月降雨（台風13号）</option>
+            <option value="1954(昭和29)年6月降雨">1954(昭和29)年6月降雨</option>
+            <option value="1957(昭和32)年8月降雨(豪雨)">1957(昭和32)年8月降雨(豪雨)</option>
+            <option value="1958(昭和33)年9月降雨（台風22号・狩野川台風）">1958(昭和33)年9月降雨（台風22号・狩野川台風）</option>
+            <option value="1959(昭和34)年8月降雨(台風7号)">1959(昭和34)年8月降雨(台風7号)</option>
+            <option value="1959(昭和34)年9月降雨(伊勢湾台風)">1959(昭和34)年9月降雨(伊勢湾台風)</option>
+            <option value="1961(昭和36)年6月豪雨">1961(昭和36)年6月豪雨</option>
+            <option value="1961(昭和36)年9月降雨・高潮(第２室戸台風)">1961(昭和36)年9月降雨・高潮(第２室戸台風)</option>
+            <option value="1966(昭和41)年6月降雨(台風4号)">1966(昭和41)年6月降雨(台風4号)</option>
+            <option value="1967(昭和42)年7月降雨(昭和42年7月豪雨)">1967(昭和42)年7月降雨(昭和42年7月豪雨)</option>
+            <option value="1971(昭和46)年8月台風23号">1971(昭和46)年8月台風23号</option>
+            <option value="1972(昭和47)年7月豪雨">1972(昭和47)年7月豪雨</option>
+            <option value="1972(昭和47)年7月降雨(台風6号)">1972(昭和47)年7月降雨(台風6号)</option>
+            <option value="1974(昭和49)年7月降雨(豪雨)">1974(昭和49)年7月降雨(豪雨)</option>
+            <option value="1974（昭和49）年6月降雨豪雨">1974（昭和49）年6月降雨豪雨</option>
+            <option value="1974(昭和49)年7月降雨(台風8号・七夕豪雨)">1974(昭和49)年7月降雨(台風8号・七夕豪雨)</option>
+            <option value="1975(昭和50)年10月(台風13号)">1975(昭和50)年10月(台風13号)</option>
+            <option value="1976(昭和51)年 台風17号">1976(昭和51)年 台風17号</option>
+            <option value="1976（昭和51）年5月降雨">1976（昭和51）年5月降雨</option>
+            <option value="1981(昭和56)年7月降雨(集中豪雨)">1981(昭和56)年7月降雨(集中豪雨)</option>
+            <option value="1981(昭和56)年10月降雨(台風24号)">1981(昭和56)年10月降雨(台風24号)</option>
+            <option value="1982(昭和57)年8月降雨(台風10号)">1982(昭和57)年8月降雨(台風10号)</option>
+            <option value="1982(昭和57)年9月降雨(台風18号)">1982(昭和57)年9月降雨(台風18号)</option>
+            <option value="1983(昭和58)年9月豪雨(台風10号)">1983(昭和58)年9月豪雨(台風10号)</option>
+            <option value="1986(昭和61)年7月降雨">1986(昭和61)年7月降雨</option>
+            <option value="1986(昭和61)年8月　台風10号">1986(昭和61)年8月　台風10号</option>
+            <option value="1989(平成元)年9月降雨(台風22号)">1989(平成元)年9月降雨(台風22号)</option>
+            <option value="1990(平成2)年 台風19号">1990(平成2)年 台風19号</option>
+            <option value="1990(平成2)年9月降雨(豪雨)">1990(平成2)年9月降雨(豪雨)</option>
+            <option value="1991(平成3)年9月降雨(台風18号)">1991(平成3)年9月降雨(台風18号)</option>
+            <option value="1995(平成7)年7月降雨(大雨)">1995(平成7)年7月降雨(大雨)</option>
+            <option value="1996(平成8)年9月降雨(台風17号)">1996(平成8)年9月降雨(台風17号)</option>
+            <option value="1997(平成9)年8月降雨(豪雨)">1997(平成9)年8月降雨(豪雨)</option>
+            <option value="1998(平成10)年8月水害">1998(平成10)年8月水害</option>
+            <option value="1998(平成10)年9月(台風6・7号)">1998(平成10)年9月(台風6・7号)</option>
+            <option value="1999(平成11)年8月降雨(豪雨)">1999(平成11)年8月降雨(豪雨)</option>
+            <option value="2000(平成12)年9月(台風14号・東海豪雨)">2000(平成12)年9月(台風14号・東海豪雨)</option>
+            <option value="2004(平成16)年10月水害">2004(平成16)年10月水害</option>
+            <option value="2004(平成16)年10月降雨(台風23号)">2004(平成16)年10月降雨(台風23号)</option>
+            <option value="2005(平成17)年9月降雨(台風14号)">2005(平成17)年9月降雨(台風14号)</option>
+            <option value="2007(平成19)年7月降雨(豪雨)">2007(平成19)年7月降雨(豪雨)</option>
+            <option value="2007(平成19)年9月水害">2007(平成19)年9月水害</option>
+            <option value="2008(平成20)年8月降雨(豪雨)">2008(平成20)年8月降雨(豪雨)</option>
+            <option value="2012(平成24)年8月降雨(京都南部豪雨)">2012(平成24)年8月降雨(京都南部豪雨)</option>
+        </select>
+    </div>
+
+    <div id='legend' class='legend'>
+        <h4>凡例</h4>
+        <div class="square" style='background-color: rgba(33, 140, 255, 0.5); display: inline-block;'>
+        </div><span style="display: inline-block; margin-left: 5px;">浸水域</span><br>
+        <div><img src="./img/location-pin2_red.png" alt="自然災害伝承碑" style="width:20px; height:20px;" />自然災害伝承碑</div><br>
+    </div>
+    <div class="map-overlay top">
+        <div class="map-overlay-inner">
+            <label>浸水域 不透明度: <span id="sinsui-slider-opacity-value">50%</span></label>
+            <input id="sinsui-slider-opacity" type="range" min="0" max="100" step="1" value="50">
+            <label>陰影起伏図 不透明度: <span id="inei-slider-opacity-value">50%</span></label>
+            <input id="inei-slider-opacity" type="range" min="0" max="100" step="1" value="50">
+        </div>
+    </div>
+    <script>
+        // add the PMTiles plugin to the maplibregl global.
+        let protocol = new pmtiles.Protocol();
+        maplibregl.addProtocol("pmtiles", protocol.tile);
+        let PMTiles_URL = "https://xs489works.xsrv.jp/MapLibreGLJS/12-03/1896_2012_sinsui_add21.pmtiles";
+        const p = new pmtiles.PMTiles(PMTiles_URL)
+        protocol.add(p);
+
+        var map = new maplibregl.Map({
+            container: 'map',
+            style: './std.json',
+            // style: './building3d.json',
+            // style: 'https://tile2.openstreetmap.jp/styles/osm-bright/style.json',
+            center: [135.87041573029123, 35.010238704934956],
+            zoom: 14,
+            pitch: 60,
+            bearing: 0,
+            hash: true,
+            attributionControl: false
+        })
+
+        // ズーム・回転
+        map.addControl(new maplibregl.NavigationControl());
+
+        // フルスクリーンモードのオンオフ
+        map.addControl(new maplibregl.FullscreenControl());
+
+        // 現在位置表示
+        map.addControl(new maplibregl.GeolocateControl({
+            positionOptions: {
+                enableHighAccuracy: false
+            },
+            fitBoundsOptions: { maxZoom: 18 },
+            trackUserLocation: true,
+            showUserLocation: true
+        }));
+
+        // スケール表示
+        map.addControl(new maplibregl.ScaleControl({
+            maxWidth: 200,
+            unit: 'metric'
+        }));
+
+        // Attributionを折りたたみ表示
+        map.addControl(new maplibregl.AttributionControl({
+            compact: true,
+            customAttribution: '（<a href="https://twitter.com/syanseto" target="_blank">Twitter</a> | <a href="https://github.com/shi-works/jma-ame-24h-maplibre-gl-js" target="_blank">Github</a>） '
+        }));
+
+        // 3D地形コントロール
+        map.addControl(
+            new maplibregl.TerrainControl({
+                source: 'gsidem',
+                exaggeration: 1 // 標高を強調する倍率
+            })
+        );
+
+        map.on('load', function () {
+            // 標高タイルソース
+            map.addSource("gsidem", {
+                type: 'raster-dem',
+                tiles: [
+                    'gsidem://https://cyberjapandata.gsi.go.jp/xyz/dem_png/{z}/{x}/{y}.png',
+                ],
+                attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html#dem" target="_blank">地理院タイル(標高タイル)</a>',
+                tileSize: 256
+            });
+
+            // map.setTerrain({ 'source': 'gsidem', 'exaggeration': 1 });
+
+            // 陰影起伏図ソース
+            map.addSource("hillshade", {
+                type: 'raster',
+                tiles: [
+                    'https://cyberjapandata.gsi.go.jp/xyz/hillshademap/{z}/{x}/{y}.png',
+                ],
+                attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html#hillshademap" target="_blank">地理院タイル(陰影起伏図)</a>',
+                tileSize: 256
+            });
+
+            // 陰影起伏図レイヤ
+            map.addLayer({
+                id: 'hillshade-tiles',
+                type: 'raster',
+                source: 'hillshade',
+                minzoom: 2,
+                maxzoom: 18,
+                paint: {
+                    'raster-opacity': 0.5
+                }
+            });
+
+            // スライダーで陰影起伏図の不透明度を制御
+            const inei_sliderOpactiy = document.getElementById('inei-slider-opacity');
+            const inei_sliderOpactiyValue = document.getElementById('inei-slider-opacity-value');
+
+            inei_sliderOpactiy.addEventListener('input', (e) => {
+                map.setPaintProperty(
+                    'hillshade-tiles',
+                    'raster-opacity',
+                    parseInt(e.target.value, 10) / 100
+                );
+                inei_sliderOpactiyValue.textContent = e.target.value + '%';
+            });
+
+            // 災害履歴図（浸水域）ソース
+            map.addSource("pmtiles-flood-disaster", {
+                type: "vector",
+                url: "pmtiles://" + PMTiles_URL,
+                attribution: '<a href="https://nlftp.mlit.go.jp/kokjo/inspect/landclassification/download.html">国土調査 土地履歴調査GISデータ(災害履歴図)を加工して作成</a>'
+            });
+
+
+            // 災害履歴図（浸水域）ラインレイヤ
+            map.addLayer({
+                "id": "flood-disaster-line",
+                "type": "line",
+                "source": "pmtiles-flood-disaster",
+                "source-layer": "1896_2012_sinsui_add21",
+                minzoom: 1,
+                maxzoom: 23,
+                'paint': {
+                    'line-color': 'rgba(0, 0, 255, 1)',
+                    'line-width': 1
+                }
+            });
+
+            // 災害履歴図（浸水域）ポリゴンレイヤ
+            map.addLayer({
+                "id": "flood-disaster-fill",
+                "type": "fill",
+                "source": "pmtiles-flood-disaster",
+                "source-layer": "1896_2012_sinsui_add21",
+                minzoom: 1,
+                maxzoom: 23,
+                'layout': {
+                },
+                'paint': {
+                    'fill-color': 'rgba(33, 140, 255, 1)',
+                    'fill-opacity': 0.5
+                }
+            });
+
+
+            // スライダーで災害履歴図（浸水域）の不透明度を制御
+            const sinsui_sliderOpactiy = document.getElementById('sinsui-slider-opacity');
+            const sinsui_sliderOpactiyValue = document.getElementById('sinsui-slider-opacity-value');
+
+            sinsui_sliderOpactiy.addEventListener('input', (e) => {
+                map.setPaintProperty(
+                    'flood-disaster-fill',
+                    'fill-opacity',
+                    parseInt(e.target.value, 10) / 100
+                );
+                sinsui_sliderOpactiyValue.textContent = e.target.value + '%';
+            });
+
+            // フィルタ設定
+            map.setFilter('flood-disaster-line', ['==', ['get', 'disastName'], '1896(明治29)年9月降雨']);
+            map.setFilter('flood-disaster-fill', ['==', ['get', 'disastName'], '1896(明治29)年9月降雨']);
+
+            // 地理院地図ベクトルタイル
+            map.addSource("gsibv-vectortile-source-1-4-16", {
+                type: "vector",
+                tiles: [
+                    "https://cyberjapandata.gsi.go.jp/xyz/experimental_bvmap/{z}/{x}/{y}.pbf"
+                ],
+                attribution: '<a href="https://github.com/gsi-cyberjapan/gsivectortile-3d-like-building">地理院地図Vector（仮称）</a>'
+            });
+
+            // 地理院地図ベクトルタイル
+            // タンク
+            map.addLayer({
+                "source": "gsibv-vectortile-source-1-4-16",
+                "minzoom": 13,
+                "maxzoom": 18,
+                "id": "buildings4302",
+                "metadata": { "name": "タンク" },
+                "type": "fill-extrusion",
+                "source-layer": "structurea",
+                "filter": ["all", ["==", "ftCode", 4302], ["==", "$type", "Polygon"]],
+                "paint": {
+                    // "fill-extrusion-color": "rgb(0,100,150)",
+                    "fill-extrusion-color": "rgb(242,234,226)",
+                    "fill-extrusion-opacity": 0.8,
+                    "fill-extrusion-height": 10
+                }
+            });
+
+            // 巨大構造物
+            map.addLayer({
+                "source": "gsibv-vectortile-source-1-4-16",
+                "minzoom": 13,
+                "maxzoom": 18,
+                "id": "buildings4301",
+                "metadata": { "name": "巨大構造物" },
+                "type": "fill-extrusion",
+                "source-layer": "structurea",
+                "filter": ["all", ["==", "ftCode", 4301], ["==", "$type", "Polygon"]],
+                "paint": {
+                    // "fill-extrusion-color": "rgb(0,100,150)",
+                    "fill-extrusion-color": "rgb(242,234,226)",
+                    "fill-extrusion-opacity": 0.5,
+                    "fill-extrusion-height": 100
+                }
+            });
+
+            // 普通無壁舎
+            map.addLayer({
+                "source": "gsibv-vectortile-source-1-4-16",
+                "minzoom": 14,
+                "maxzoom": 18,
+                "id": "buildings3111",
+                "metadata": { "name": "普通無壁舎" },
+                "type": "fill-extrusion",
+                "source-layer": "building",
+                "filter": ["all", ["==", "ftCode", 3111], ["==", "$type", "Polygon"]],
+                "paint": {
+                    // "fill-extrusion-color": "rgb(0,100,150)",
+                    "fill-extrusion-color": "rgb(242,234,226)",
+                    "fill-extrusion-opacity": 0.5,
+                    "fill-extrusion-height": 10
+                }
+            });
+
+            // 堅ろう無壁舎
+            map.addLayer({
+                "source": "gsibv-vectortile-source-1-4-16",
+                "minzoom": 13,
+                "maxzoom": 18,
+                "id": "buildings3112",
+                "metadata": { "name": "堅ろう無壁舎" },
+                "type": "fill-extrusion",
+                "source-layer": "building",
+                "filter": ["all", ["==", "ftCode", 3112], ["==", "$type", "Polygon"]],
+                "paint": {
+                    "fill-extrusion-color": "rgb(150,200,255)",
+                    "fill-extrusion-opacity": 0.5,
+                    "fill-extrusion-height": 40
+                }
+            });
+
+            // 普通建物
+            map.addLayer({
+                "source": "gsibv-vectortile-source-1-4-16",
+                "minzoom": 14,
+                "maxzoom": 18,
+                "id": "buildings3101",
+                "metadata": { "name": "普通建物" },
+                "type": "fill-extrusion",
+                "source-layer": "building",
+                "filter": ["all", ["==", "ftCode", 3101], ["==", "$type", "Polygon"]],
+                "paint": {
+                    // "fill-extrusion-color": "rgb(0,100,150)",
+                    "fill-extrusion-color": "rgb(242,234,226)",
+                    "fill-extrusion-opacity": 0.5,
+                    "fill-extrusion-height": 10
+                }
+            });
+
+            // 堅ろう建物
+            map.addLayer({
+                "source": "gsibv-vectortile-source-1-4-16",
+                "minzoom": 13,
+                "maxzoom": 18,
+                "id": "buildings3102",
+                "metadata": { "name": "堅ろう建物" },
+                "type": "fill-extrusion",
+                "source-layer": "building",
+                "filter": ["all", ["==", "ftCode", 3102], ["==", "$type", "Polygon"]],
+                "paint": {
+                    "fill-extrusion-color": "rgb(150,200,255)",
+                    "fill-extrusion-opacity": 0.5,
+                    "fill-extrusion-height": 40
+                }
+            });
+
+            // 高層建物
+            map.addLayer({
+                "source": "gsibv-vectortile-source-1-4-16",
+                "minzoom": 13,
+                "maxzoom": 18,
+                "id": "buildings3103",
+                "metadata": { "name": "高層建物" },
+                "type": "fill-extrusion",
+                "source-layer": "building",
+                "filter": ["all", ["==", "ftCode", 3103], ["==", "$type", "Polygon"]],
+                "paint": {
+                    "fill-extrusion-color": "rgb(0,255,255)",
+                    "fill-extrusion-opacity": 0.5,
+                    "fill-extrusion-height": 100
+                }
+            });
+
+            // 注記-河川名
+            map.addLayer({
+                "type": "symbol",
+                "id": "gsi-label-layer",
+                "source": "gsibv-vectortile-source-1-4-16",
+                "source-layer": "label",
+                "minzoom": 11,
+                "maxzoom": 16,
+                "filter": ["all", ["==", "ftCode", 100], ["==", "annoCtg", 322]],
+                "paint": {
+                    'text-color': 'rgba(0, 101, 203, 1)',
+                    "text-halo-color": "rgba(255, 255, 255, 1)",
+                    "text-halo-width": 1.0
+                },
+                "layout": {
+                    "text-size": 18,
+                    "text-font": ["Open Sans Bold"],
+                    "text-field": ["get", "knj"],
+                    "symbol-placement": "point",
+                    "text-allow-overlap": false,
+                    "visibility": "visible"
+                }
+            });
+
+            // 自然災害伝承碑ソース
+            map.addSource('denshouhi', {
+                'type': 'geojson',
+                'data': './20230629.geojson',
+                attribution: '<a href="https://www.gsi.go.jp/bousaichiri/denshouhi_datainfo.html">自然災害伝承碑データ（国土地理院Webサイト）</a>'
+            });
+
+            map.loadImage('./img/location-pin2_red.png', // location-pinアイコンのURLを指定
+                function (error, image) {
+                    if (error) throw error;
+                    map.addImage('location-pin-2', image); // 'location-pin'という名前でアイコンを追加
+                }
+            );
+
+            // 自然災害伝承碑シンボルレイヤ
+            map.addLayer({
+                'id': 'denshouhi-1',
+                "type": "symbol",
+                'source': 'denshouhi',
+                "layout": {
+                    "icon-image": "location-pin-2",
+                    "icon-size": 0.5
+                }
+            });
+
+        });
+
+        // マップの中心座標を設定
+        function getMapCenter(CenterText) {
+            const CenterTable = {
+                // 緯度、経度、ズームレベル、ベアリング、ピッチ
+                '1896(明治29)年9月降雨': [35.01023870493496, 135.87041573029123, 12, 0, 60],
+                '1911(明治44)年8月4日台風': [34.7114670915511, 137.83446407726163, 12, 0, 60],
+                '1935(昭和10)年6月降雨(鴨川大洪水)': [34.97744803781426, 135.72981243876123, 12, 0, 60],
+                '1938(昭和13)年7月降雨(大雨)阪神大水害': [34.68684826489489, 135.1777169593018, 12, 0, 60],
+                '1947(昭和22)年9月降雨(カスリーン台風)': [35.74909652980512, 139.87446270366996, 12, 0, 60],
+                '1950(昭和25)年9月降雨・高潮(ジェーン台風)': [34.71465366934854, 135.46297705134168, 12, 0, 60],
+                '1951(昭和26)年7月降雨(ケイト台風)': [35.01775939631742, 135.69060908325568, 12, 0, 60],
+                '1952(昭和27)年7月降雨': [34.20848512945683, 135.1585797469653, 12, 0, 60],
+                '1953(昭和28)年8月降雨(大雨)': [34.7652591640855, 135.8180473122521, 12, 0, 60],
+                '1953(昭和28)年8・9月降雨(南山城水害・台風13号)': [34.88630755709846, 135.7685873244811, 12, 0, 60],
+                '1953(昭和28)年9月降雨（台風13号）': [34.82788756634688, 135.41675605850676, 12, 0, 60],
+                '1954(昭和29)年6月降雨': [34.23148400968109, 135.18519180189483, 12, 0, 60],
+                '1957(昭和32)年8月降雨(豪雨)': [35.33159157254197, 137.12913294192774, 12, 0, 60],
+                '1958(昭和33)年9月降雨（台風22号・狩野川台風）': [35.79833786808845, 139.79084423443803, 12, 0, 60],
+                '1959(昭和34)年8月降雨(台風7号)': [34.97302998057198, 135.7354732738967, 12, 0, 60],
+                '1959(昭和34)年9月降雨(伊勢湾台風)': [35.127179055677594, 136.85861874598675, 12, 0, 60],
+                '1961(昭和36)年6月豪雨': [34.81382884471874, 137.84276764466213, 12, 0, 60],
+                '1961(昭和36)年9月降雨・高潮(第２室戸台風)': [34.6942081038935, 135.47817877392745, 12, 0, 60],
+                '1966(昭和41)年6月降雨(台風4号)': [35.7831169986966, 139.78703796534316, 12, 0, 60],
+                '1967(昭和42)年7月降雨(昭和42年7月豪雨)': [34.71865733150053, 135.37354543577518, 12, 0, 60],
+                '1971(昭和46)年8月台風23号': [34.81092937797929, 137.02438978669747, 12, 0, 60],
+                '1972(昭和47)年7月豪雨': [34.96836670199457, 137.13565031623952, 12, 0, 60],
+                '1972(昭和47)年7月降雨(台風6号)': [35.5115662205388, 139.46389373567467, 12, 0, 60],
+                '1974(昭和49)年7月降雨(豪雨)': [35.07957876293043, 136.57861110651163, 12, 0, 60],
+                '1974（昭和49）年6月降雨豪雨': [34.87854789421281, 137.0077824258181, 12, 0, 60],
+                '1974(昭和49)年7月降雨(台風8号・七夕豪雨)': [35.015869756977445, 138.43805654104406, 12, 0, 60],
+                '1975(昭和50)年10月(台風13号)': [34.73843923703386, 137.7901292600387, 12, 0, 60],
+                '1976(昭和51)年 台風17号': [35.29680969593201, 136.85024169629975, 12, 0, 60],
+                '1976（昭和51）年5月降雨': [34.614929334258846, 137.05370194659295, 12, 0, 60],
+                '1981(昭和56)年7月降雨(集中豪雨)': [35.64794939543221, 139.69210964301476, 12, 0, 60],
+                '1981(昭和56)年10月降雨(台風24号)': [35.85436660791605, 139.78242727462788, 12, 0, 60],
+                '1982(昭和57)年8月降雨(台風10号)': [34.57352025618671, 135.79762236443597, 12, 0, 60],
+                '1982(昭和57)年9月降雨(台風18号)': [35.81966852298579, 139.8003482836679, 12, 0, 60],
+                '1983(昭和58)年9月豪雨(台風10号)': [35.42569061320609, 136.98365250358816, 12, 0, 60],
+                '1986(昭和61)年7月降雨': [34.89748481092035, 135.7664256693711, 12, 0, 60],
+                '1986(昭和61)年8月　台風10号': [35.87754797233618, 139.76879055171835, 12, 0, 60],
+                '1989(平成元)年9月降雨(台風22号)': [34.25066270712282, 135.16199823559012, 12, 0, 60],
+                '1990(平成2)年 台風19号': [35.344447815707454, 136.55188878876905, 12, 0, 60],
+                '1990(平成2)年9月降雨(豪雨)': [34.74131397610799, 135.3682814593956, 12, 0, 60],
+                '1991(平成3)年9月降雨(台風18号)': [35.85611383003178, 139.7703024772873, 12, 0, 60],
+                '1995(平成7)年7月降雨(大雨)': [34.25748947042734, 135.23561738486777, 12, 0, 60],
+                '1996(平成8)年9月降雨(台風17号)': [35.713934578620595, 140.20926405423873, 12, 0, 60],
+                '1997(平成9)年8月降雨(豪雨)': [34.64092897570537, 135.57504025816033, 12, 0, 60],
+                '1998(平成10)年8月水害': [35.07453422495216, 138.90238263394662, 12, 0, 60],
+                '1998(平成10)年9月(台風6・7号)': [34.71378660644732, 137.913082424449, 12, 0, 60],
+                '1999(平成11)年8月降雨(豪雨)': [34.594317123762295, 135.753992408033, 12, 0, 60],
+                '2000(平成12)年9月(台風14号・東海豪雨)': [35.2421354723771, 136.85799961484773, 12, 0, 60],
+                '2004(平成16)年10月水害': [35.073428234300735, 138.95846053550235, 12, 0, 60],
+                '2004(平成16)年10月降雨(台風23号)': [35.35623683031837, 136.56932728302584, 12, 0, 60],
+                '2005(平成17)年9月降雨(台風14号)': [35.707385570638706, 139.60650471417424, 12, 0, 60],
+                '2007(平成19)年7月降雨(豪雨)': [34.572042269073485, 135.75896313715756, 12, 0, 60],
+                '2007(平成19)年9月水害': [35.07253722013572, 138.9515407570732, 12, 0, 60],
+                '2008(平成20)年8月降雨(豪雨)': [35.13853637359833, 136.86283827310464, 12, 0, 60],
+                '2012(平成24)年8月降雨(京都南部豪雨)': [34.90382234279767, 135.8054247808783, 12, 0, 60]
+            };
+            return CenterTable[CenterText];
+        }
+
+        // 切り替え表示
+        function SelectFloodDisaster() {
+            var disastName = document.getElementById('flood-disaster').value;
+
+            // 値を緯度、経度にそれぞれ代入
+            const locationInfo = getMapCenter(disastName);
+
+            const latitude = locationInfo[0];
+            const longitude = locationInfo[1];
+            const zoomlevel = locationInfo[2];
+            const bearing = locationInfo[3];
+            const pitch = locationInfo[4];
+
+            // マップの中心座標へ遷移
+            map.flyTo({
+                center: [longitude, latitude],
+                zoom: zoomlevel,
+                bearing: bearing,
+                pitch: pitch
+            });
+
+            //レイヤのフィルタを更新
+            map.setFilter('flood-disaster-line', ['==', ['get', 'disastName'], disastName]);
+            map.setFilter('flood-disaster-fill', ['==', ['get', 'disastName'], disastName]);
+
+        }
+
+
+        // 画像が存在するかどうかを確認する関数
+        async function checkImage(url) {
+            try {
+                const response = await fetch(url, { method: 'HEAD' });
+                return response.ok;
+            } catch {
+                return false;
+            }
+        }
+
+        // 自然災害伝承碑ポップアップ表示
+        map.on('click', 'denshouhi-1', async (e) => {
+            var lng = e.features[0].geometry.coordinates[0];
+            var lat = e.features[0].geometry.coordinates[1];
+            var id = e.features[0].properties['ID'];
+            var himei = e.features[0].properties['碑名'];
+            var konryunen = e.features[0].properties['建立年'];
+            var shozaichi = e.features[0].properties['所在地'];
+            var saigaimei = e.features[0].properties['災害名'];
+            var saigaishubetsu = e.features[0].properties['災害種別'];
+            var denshonaiyo = e.features[0].properties['伝承内容'];
+
+            // 画像のURL（.jpgと.JPGの両方を試す）
+            let imgURL_jpg = "https://maps.gsi.go.jp/legend/disaster_lore/" + id.substring(0, 5) + "/" + id + ".jpg";
+            let imgURL_JPG = "https://maps.gsi.go.jp/legend/disaster_lore/" + id.substring(0, 5) + "/" + id + ".JPG";
+
+            // どちらの画像が存在するかを確認
+            let imgURL = await checkImage(imgURL_jpg) ? imgURL_jpg :
+                await checkImage(imgURL_JPG) ? imgURL_JPG :
+                    '';  // どちらの画像も存在しない場合は空の文字列を使用
+
+            // var imgURL = "https://maps.gsi.go.jp/legend/disaster_lore/" + id.substring(0, 5) + "/" + id + ".jpg";
+
+            new maplibregl.Popup()
+                .setLngLat(e.lngLat)
+                .setHTML(
+                    '<div style="border-bottom:1px solid #000; font-size: 1.2em; color: red;"><strong>碑名: ' + himei + '</strong></div>' +
+                    '<div style="border-bottom:1px solid #000;">建立年: ' + konryunen + '</div>' +
+                    '<div style="border-bottom:1px solid #000;">所在地: ' + shozaichi + '</div>' +
+                    '<div style="border-bottom:1px solid #000;">災害名: ' + saigaimei + '</div>' +
+                    '<div style="border-bottom:1px solid #000;">災害種別: ' + saigaishubetsu + '</div>' +
+                    '<div style="border-bottom:1px solid #000;">伝承内容: ' + denshonaiyo + '</div>' +
+                    '<div><a href="' + imgURL + '" target="_blank"><img src="' + imgURL + '" alt="画像" style="width: 100%; height: auto;"></a></div>' +
+                    '<div style="border-bottom:1px solid #000;">ID: ' + id + '</div>' +
+                    '<div><a href="https://www.google.com/maps?q=' + lat + ',' + lng + '&hl=ja" target="_blank">🌎Google Maps</a></div>' +
+                    '<div><a href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=' + lat + ',' + lng + '&hl=ja" target="_blank">📷Street View</a></div>'
+                )
+                .addTo(map);
+        });
+
+        // 災害履歴図（浸水域）ポップアップ表示
+        map.on('click', 'flood-disaster-fill', (e) => {
+            lng = e.lngLat.lng;
+            lat = e.lngLat.lat;
+            var date = e.features[0].properties['date'];
+            var formattedDate;
+
+            // 年、月、日に分割
+            var year = date.substring(0, 4);
+            var month = date.substring(4, 6);
+
+            if (date.length == 6) {
+                // 6文字の場合 (例: 194709)
+                formattedDate = year + "年" + month + "月";
+            } else if (date.length == 8) {
+                // 8文字の場合 (例: 20120813)
+                var day = date.substring(6, 8);
+                formattedDate = year + "年" + month + "月" + day + "日";
+            } else {
+                formattedDate = "不正な日付フォーマット";
+            }
+
+            var source = e.features[0].properties['source'];
+            var disastName = e.features[0].properties['disastName'];
+
+            // クリックしたピクセル座標にあるすべてのフィーチャを取得する
+            var features = map.queryRenderedFeatures(e.point);
+
+            // クリックしたピクセル座標にあるレイヤ名を取得する
+            var clickedLayerNames = features.map(function (feature) {
+                return feature.layer.id;
+            });
+
+            if (clickedLayerNames.indexOf('denshouhi-1') === -1) {
+                new maplibregl.Popup()
+                    .setLngLat(e.lngLat)
+                    .setHTML(
+                        '<div style="border-bottom:1px solid #000; font-size: 1.2em; color: blue;"><strong>水害名: ' + disastName + '</strong></div>' +
+                        '<div style="border-bottom:1px solid #000;">年月日: ' + formattedDate + '</div>' +
+                        '<div style="border-bottom:1px solid #000;">出典: ' + source + '</div>' +
+                        '<div><a href="https://www.google.com/maps?q=' + lat + ',' + lng + '&hl=ja" target="_blank">🌎Google Maps</a></div>' +
+                        '<div><a href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=' + lat + ',' + lng + '&hl=ja" target="_blank">📷Street View</a></div>'
+                    )
+                    .addTo(map);
+            }
+        });
+    </script>
+
+</body>
+
+</html>
